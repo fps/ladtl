@@ -10,10 +10,13 @@
 #include <stdexcept>
 #include <unistd.h>
 #include <iostream>
+#include <cassert>
 
 namespace ladtl {
 
 	inline void default_process(const Eigen::MatrixXd&in, Eigen::MatrixXd &out) {
+		assert(out.rows() == in.rows());
+		assert(out.cols() == in.cols());
 		out = in;
 	}
 
@@ -33,28 +36,28 @@ namespace ladtl {
 
 		virtual void shutdown() {
 			std::cout << "shutting down" << std::endl;
-			jack_deactivate(m_client);
 			m_shutdown = true;
 		}
 		static jack_client_base *m_client_base;
 	};
 
-	template<class T>
-	void shutdown_handler(int) {
-		std::cout << "shutdown" << std::endl;
-		jack_client_base::m_client_base->shutdown();
+	inline void shutdown_handler(int signum) {
+		std::cout << "shutdown_handler" << std::endl;
+		if (signum == 0) {
+			std::cout << "shutdown" << std::endl;
+			jack_client_base::m_client_base->shutdown();
+		}
 	}
 
-	template<class T>
-	void default_signal_handler(int) { 
+	inline void noop_handler(int) {
+
 	}
  
 	template 
 	<
 		class process = void(*)(const Eigen::MatrixXd&, Eigen::MatrixXd &),
 		unsigned int in_channels = 2, 
-		unsigned int out_channels = 2,
-		class signal_handler = void(*)(int)
+		unsigned int out_channels = 2
 	> 
 	struct jack_client : 
 		public jack_client_base 
@@ -62,7 +65,7 @@ namespace ladtl {
 		jack_client(
 			const std::string &name = "jack_client", 
 			process p = default_process,
-			signal_handler sh = default_signal_handler<jack_client_type>
+			void(*sh)(int) = shutdown_handler
 		) :
 			m_name(name),
 			m_process(p)
@@ -87,7 +90,7 @@ namespace ladtl {
 				if (m_out_ports[i] == 0) throw std::runtime_error(std::string("failed to register output port ") + s.str());
 			}
 		
-			m_original_signal_handler = signal(9, sh);
+			m_original_signal_handler = signal(2, sh);
 	  
 			int frames = jack_get_buffer_size(m_client);
 			in = Eigen::MatrixXd((int)in_channels, (int)frames);
@@ -101,11 +104,14 @@ namespace ladtl {
 		}
 		  
 		void operator()() {
+			m_shutdown = false;
 			jack_activate(m_client);
-			while (!m_shutdown) sleep(1);
+			while (!m_shutdown) usleep(10000);
+			jack_deactivate(m_client);
 		}
 
 		~jack_client() {
+			jack_deactivate(m_client);
 			jack_client_close(m_client);
 			signal(9, m_original_signal_handler);
 		}
@@ -130,7 +136,7 @@ namespace ladtl {
 			return 0;
 		} // process_callback
 
-		typedef jack_client<process, in_channels, out_channels, signal_handler> jack_client_type;
+		typedef jack_client<process, in_channels, out_channels> jack_client_type;
 
 		protected:
 			std::string m_name;
@@ -142,6 +148,36 @@ namespace ladtl {
 
 			process m_process;
 	}; // jack_client
+
+
+
+	template 
+	<
+		class process,
+		unsigned int in_channels, 
+		unsigned int out_channels
+	> 
+	inline void jack_client_run(
+		const std::string &name = "jack_client", 
+		process p = default_process,
+		void(*sh)(int) = shutdown_handler
+	) {
+		jack_client<process, in_channels, out_channels> client(name, p, sh);
+		client();
+	} // jack_client_run
+
+	template 
+	<
+		class process
+	> 
+	inline void jack_client_run2(
+		const std::string &name = "jack_client", 
+		process p = default_process,
+		void(*sh)(int) = shutdown_handler
+	) {
+		jack_client<process, 2, 2> client(name, p, sh);
+		client();
+	} // jack_client_run
 
 } // namespace
 
