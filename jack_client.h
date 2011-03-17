@@ -23,21 +23,20 @@ namespace ladtl {
 	}
  
 	struct jack_client_base {
-	 jack_client_t *m_client;
-	 bool m_shutdown;
+		jack_client_t *m_client;
+		bool m_shutdown;
 
-	jack_client_base() : m_shutdown(false) {
-		if (m_client_base == 0) m_client_base = this;
-		else throw std::runtime_error("only one client may exist at a time..");
-	}
+		jack_client_base() : m_shutdown(false) {
+			if (m_client_base == 0) m_client_base = this;
+			else throw std::runtime_error("only one client may exist at a time..");
+		}
 
-	virtual void shutdown() {
-		std::cout << "shutting down" << std::endl;
-		jack_deactivate(m_client);
-		m_shutdown = true;
-	}
-	static jack_client_base *m_client_base;
-
+		virtual void shutdown() {
+			std::cout << "shutting down" << std::endl;
+			jack_deactivate(m_client);
+			m_shutdown = true;
+		}
+		static jack_client_base *m_client_base;
 	};
 
 	template<class T>
@@ -56,7 +55,7 @@ namespace ladtl {
 		unsigned int in_channels = 2, 
 		unsigned int out_channels = 2,
 		class signal_handler = void(*)(int)
-   > 
+	> 
 	struct jack_client : 
 		public jack_client_base 
 	{  
