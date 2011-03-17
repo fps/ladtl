@@ -28,24 +28,33 @@ namespace ladtl {
 	struct jack_client_base {
 		jack_client_t *m_client;
 		bool m_shutdown;
+		static std::vector<jack_client_base*> m_client_bases;
+		static const int m_shutdown_signal;
 
-		jack_client_base() : m_shutdown(false) {
-			if (m_client_base == 0) m_client_base = this;
-			else throw std::runtime_error("only one client may exist at a time..");
+		unsigned int m_client_base_index;
+
+		jack_client_base() : 
+			m_shutdown(false)
+		{
+			m_client_base_index = m_client_bases.size();
+			m_client_bases.push_back(this);
+
+			//if (m_client_base == 0) m_client_base = this;
+			//else throw std::runtime_error("only one client may exist at a time..");
 		}
 
-		virtual void shutdown() {
-			std::cout << "shutting down" << std::endl;
-			m_shutdown = true;
-		}
+		virtual void shutdown() = 0;
+
 		static jack_client_base *m_client_base;
 	};
 
 	inline void shutdown_handler(int signum) {
 		std::cout << "shutdown_handler" << std::endl;
-		if (signum == 0) {
-			std::cout << "shutdown" << std::endl;
-			jack_client_base::m_client_base->shutdown();
+		if (signum == jack_client_base::m_shutdown_signal) {
+			for(unsigned int index = 0; index < jack_client_base::m_client_bases.size(); ++index) {
+				std::cout << "shutdown" << std::endl;
+				jack_client_base::m_client_bases[index]->shutdown();
+			}
 		}
 	}
 
@@ -90,7 +99,7 @@ namespace ladtl {
 				if (m_out_ports[i] == 0) throw std::runtime_error(std::string("failed to register output port ") + s.str());
 			}
 		
-			m_original_signal_handler = signal(2, sh);
+			m_original_signal_handler = signal(jack_client_base::m_shutdown_signal, sh);
 	  
 			int frames = jack_get_buffer_size(m_client);
 			in = Eigen::MatrixXd((int)in_channels, (int)frames);
@@ -103,17 +112,16 @@ namespace ladtl {
 			);
 		}
 		  
+		~jack_client() {
+			jack_client_close(m_client);
+			signal(jack_client_base::m_shutdown_signal, m_original_signal_handler);
+		}
+
 		void operator()() {
 			m_shutdown = false;
 			jack_activate(m_client);
 			while (!m_shutdown) usleep(10000);
 			jack_deactivate(m_client);
-		}
-
-		~jack_client() {
-			jack_deactivate(m_client);
-			jack_client_close(m_client);
-			signal(9, m_original_signal_handler);
 		}
 
 		int process_callback(jack_nframes_t nframes) {
@@ -135,6 +143,11 @@ namespace ladtl {
 			}
 			return 0;
 		} // process_callback
+
+		virtual void shutdown() {
+			std::cout << "shutting down" << std::endl;
+			m_shutdown = true;
+		}
 
 		typedef jack_client<process, in_channels, out_channels> jack_client_type;
 
