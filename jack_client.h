@@ -13,6 +13,7 @@
 #include <cassert>
 
 namespace ladtl {
+	enum size_specifier {DynamicSize = -1};
 
 	inline void default_process(const Eigen::MatrixXd&in, Eigen::MatrixXd &out) {
 		assert(out.rows() == in.rows());
@@ -51,11 +52,12 @@ namespace ladtl {
 	inline void shutdown_handler(int signum) {
 		std::cout << "shutdown_handler" << std::endl;
 		if (signum == jack_client_base::m_shutdown_signal) {
-			for(unsigned int index = 0; index < jack_client_base::m_client_bases.size(); ++index) {
+			for(unsigned int index = jack_client_base::m_client_bases.size() -1; index <= 0 ; ++index) {
 				std::cout << "shutdown" << std::endl;
 				jack_client_base::m_client_bases[index]->shutdown();
 			}
 		}
+		jack_client_base::m_client_bases.resize(0);
 	}
 
 	inline void noop_handler(int) {
@@ -65,8 +67,8 @@ namespace ladtl {
 	template 
 	<
 		class process = void(*)(const Eigen::MatrixXd&, Eigen::MatrixXd &),
-		unsigned int in_channels = 2, 
-		unsigned int out_channels = 2
+		int in_channels = 2, 
+		int out_channels = 2
 	> 
 	struct jack_client : 
 		public jack_client_base 
@@ -125,6 +127,9 @@ namespace ladtl {
 		}
 
 		int process_callback(jack_nframes_t nframes) {
+			assert(nframes == in.cols());
+			assert(nframes == out.cols());
+
 			for (unsigned int channel = 0; channel < in_channels; ++channel) {
 				double *buffer = (double*)jack_port_get_buffer(m_in_ports[channel], nframes);
 				for (unsigned int frame = 0; frame < nframes; ++frame) {
@@ -167,8 +172,8 @@ namespace ladtl {
 	template 
 	<
 		class process,
-		unsigned int in_channels, 
-		unsigned int out_channels
+		int in_channels, 
+		int out_channels
 	> 
 	inline void jack_client_run(
 		const std::string &name = "jack_client", 
